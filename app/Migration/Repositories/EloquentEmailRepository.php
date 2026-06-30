@@ -83,4 +83,43 @@ final class EloquentEmailRepository implements EmailRepositoryInterface
 
         return $affected === 1;
     }
+
+    public function streamMigratedUnverifiedIds(int $chunk): iterable
+    {
+        $cursor = 0;
+
+        while (true) {
+            $ids = Email::query()
+                ->migratedUnverified()
+                ->where('id', '>', $cursor)
+                ->orderBy('id')
+                ->limit($chunk)
+                ->pluck('id');
+
+            if ($ids->isEmpty()) {
+                break;
+            }
+
+            foreach ($ids as $id) {
+                yield (int) $id;
+            }
+
+            $cursor = (int) $ids->last();
+        }
+    }
+
+    public function countMigratedUnverified(): int
+    {
+        return Email::query()->migratedUnverified()->count();
+    }
+
+    public function markVerified(int $id): bool
+    {
+        $affected = Email::query()
+            ->whereKey($id)
+            ->migratedUnverified()
+            ->update(['verified_at' => now()]);
+
+        return $affected === 1;
+    }
 }

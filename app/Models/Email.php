@@ -30,4 +30,12 @@ class Email extends Model
     {
         return $query->whereNull('migrated_at');
     }
+
+    /**
+     * Rows migrated but not yet verified.
+     */
+    public function scopeMigratedUnverified(Builder $query): Builder
+    {
+        return $query->whereNotNull('migrated_at')->whereNull('verified_at');
+    }
 }

@@ -6,4 +6,5 @@ enum MigrationPhase: string
 {
     case Persist = 'persist';
     case Migrate = 'migrate';
+    case Verify = 'verify';
 }

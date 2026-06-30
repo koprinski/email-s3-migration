@@ -26,4 +26,11 @@ interface EmailRepositoryInterface
      * Compare-and-set: persist the S3 paths and stamp migrated_at ONLY while the row is still un-migrated. Returns false (0 rows affected) when another worker already claimed it — exactly-once without locking.
      */
     public function markMigrated(int $id, ?string $bodyS3Path, array $fileS3Paths): bool;
+
+    /** ids of rows migrated but not yet verified */
+    public function streamMigratedUnverifiedIds(int $chunk): iterable;
+
+    public function countMigratedUnverified(): int;
+
+    public function markVerified(int $id): bool;
 }
