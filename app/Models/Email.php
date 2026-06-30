@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -21,4 +22,12 @@ class Email extends Model
         'created_at' => 'datetime',
         'sent_at' => 'datetime',
     ];
+
+    /**
+     * Rows still awaiting migration.
+     */
+    public function scopeUnmigrated(Builder $query): Builder
+    {
+        return $query->whereNull('migrated_at');
+    }
 }
