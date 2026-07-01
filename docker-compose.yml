@@ -23,6 +23,7 @@ x-app: &app
   volumes:
     - .:/var/www/html
   environment: *app-environment
+  restart: unless-stopped
   depends_on:
     postgres:
       condition: service_healthy
