@@ -56,7 +56,7 @@ class EmailFactory extends Factory
         return $this->afterCreating(function (Email $email) {
             $paths = [];
             foreach ($email->file_ids ?? [] as $fileId) {
-                $paths[(string) $fileId] = "emails/{$email->id}/attachments/{$fileId}_file";
+                $paths[(string) $fileId] = "files/{$fileId}/file";
             }
 
             $email->forceFill([

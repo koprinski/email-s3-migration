@@ -11,15 +11,15 @@ final class S3Path
         return "emails/{$emailId}/body.html";
     }
 
-    public static function attachment(int $emailId, int $fileId, string $name): string
+    /**
+     * Keyed by file, not by email: a files row shared by many emails maps to
+     * exactly one S3 object, so it is uploaded once no matter how often it is
+     * attached. Each email's file_s3_paths still records which key belongs to
+     * which file_id.
+     */
+    public static function attachment(int $fileId, string $name): string
     {
-        return "emails/{$emailId}/attachments/{$fileId}_".self::slugFilename($name);
-    }
-
-    /** Prefix covering every object for one email (handy for listing/cleanup). */
-    public static function prefix(int $emailId): string
-    {
-        return "emails/{$emailId}/";
+        return "files/{$fileId}/".self::slugFilename($name);
     }
 
     private static function slugFilename(string $name): string

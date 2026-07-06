@@ -34,8 +34,25 @@ class StrategiesTest extends TestCase
         $result = (new AttachmentMigrationStrategy($this->app->make(ObjectStorage::class), Storage::disk('local')))
             ->migrate($email);
 
-        $this->assertSame(['7' => 'emails/3/attachments/7_a.bin'], $result->fileS3Paths);
-        Storage::disk('s3')->assertExists('emails/3/attachments/7_a.bin');
+        $this->assertSame(['7' => 'files/7/a.bin'], $result->fileS3Paths);
+        Storage::disk('s3')->assertExists('files/7/a.bin');
+    }
+
+    public function test_attachment_already_in_s3_is_reused_not_reuploaded(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('attachments/a.bin', 'hello');
+
+        $storage = Mockery::mock(ObjectStorage::class);
+        $storage->shouldReceive('exists')->with('files/7/a.bin')->andReturnTrue();
+        $storage->shouldReceive('size')->with('files/7/a.bin')->andReturn(5);
+        $storage->shouldNotReceive('putStream');
+
+        $email = new EmailData(3, null, [7], [new FileData(7, 'a.bin', 'attachments/a.bin', 5, 'x')]);
+        $result = (new AttachmentMigrationStrategy($storage, Storage::disk('local')))->migrate($email);
+
+        $this->assertSame(['7' => 'files/7/a.bin'], $result->fileS3Paths);
+        $this->assertSame([], $result->skipped);
     }
 
     public function test_attachment_missing_file_is_skipped(): void

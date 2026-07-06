@@ -8,6 +8,8 @@ use App\Migration\Jobs\MigrateEmailChunk;
 use Illuminate\Bus\Batch;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\LazyCollection;
 use Illuminate\Support\Str;
@@ -19,12 +21,40 @@ class MigrateEmailsToS3Command extends Command
         {--chunk= : Emails per chunk/job (default: config migration.chunk_size)}
         {--limit= : Process at most N emails}
         {--from-id= : Only process emails with id greater than this}
-        {--retry-failed : Reprocess only emails recorded in migration_failures}';
+        {--retry-failed : Reprocess only emails recorded in migration_failures}
+        {--force : Dispatch even if a previous migration batch is still running}';
 
     protected $description = 'Migrate email bodies and attachments to S3 (idempotent, resumable).';
 
     public function handle(EmailRepositoryInterface $emails, FailureRecorderInterface $failures): int
     {
+        // TTL must outlive the slowest dispatch (streaming millions of ids), not just the common case.
+        $lock = Cache::lock('emails:migrate-to-s3:dispatch', 3600);
+
+        if (! $lock->get()) {
+            $this->components->error('Another emails:migrate-to-s3 invocation is already dispatching. Aborting.');
+
+            return self::FAILURE;
+        }
+
+        try {
+            return $this->dispatchMigration($emails, $failures);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function dispatchMigration(EmailRepositoryInterface $emails, FailureRecorderInterface $failures): int
+    {
+        if (! $this->option('force') && ($active = $this->activeBatchName()) !== null) {
+            $this->components->error(
+                "Migration batch '{$active}' still has jobs in flight; dispatching again would double the work. "
+                .'Wait for it to finish or pass --force.'
+            );
+
+            return self::FAILURE;
+        }
+
         $chunkSize = (int) ($this->option('chunk') ?: config('migration.chunk_size'));
         $fromId = $this->option('from-id') !== null ? (int) $this->option('from-id') : null;
         $limit = $this->option('limit') !== null ? (int) $this->option('limit') : null;
@@ -74,5 +104,20 @@ class MigrateEmailsToS3Command extends Command
         $this->line('  Note: exit 0 means dispatched, not migrated. Failures land in migration_failures.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Name of a previous run's batch that still has jobs in flight.
+     * Rows where every remaining pending job has terminally failed don't count.
+     */
+    private function activeBatchName(): ?string
+    {
+        return DB::table('job_batches')
+            ->where('name', 'like', 'emails-s3:%')
+            ->whereNull('finished_at')
+            ->whereNull('cancelled_at')
+            ->whereColumn('pending_jobs', '>', 'failed_jobs')
+            ->orderByDesc('created_at')
+            ->value('name');
     }
 }

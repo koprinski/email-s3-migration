@@ -19,7 +19,10 @@ final class MigrationVerifier
         $problems = [];
 
         if ($email->body_s3_path === null) {
-            $problems[] = 'missing body_s3_path';
+            // A NULL/empty body has nothing to migrate, so a NULL path is the correct final state.
+            if ($email->body !== null && $email->body !== '') {
+                $problems[] = 'missing body_s3_path';
+            }
         } elseif (! $this->storage->exists($email->body_s3_path)) {
             $problems[] = 'body object missing';
         } elseif ($email->body !== null && $this->storage->size($email->body_s3_path) !== strlen($email->body)) {

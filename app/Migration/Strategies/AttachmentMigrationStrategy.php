@@ -43,6 +43,15 @@ final class AttachmentMigrationStrategy implements MigrationStrategy
                 continue;
             }
 
+            $key = S3Path::attachment($file->id, $file->name);
+            $expected = (int) $this->sourceDisk->size($file->path);
+
+            if ($this->storage->exists($key) && $this->storage->size($key) === $expected) {
+                $map[(string) $fileId] = $key;
+
+                continue;
+            }
+
             $stream = $this->sourceDisk->readStream($file->path);
 
             if (! is_resource($stream)) {
@@ -50,9 +59,6 @@ final class AttachmentMigrationStrategy implements MigrationStrategy
 
                 continue;
             }
-
-            $key = S3Path::attachment($email->id, $file->id, $file->name);
-            $expected = (int) $this->sourceDisk->size($file->path);
 
             try {
                 $this->storage->putStream($key, $stream, $expected);

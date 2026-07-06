@@ -78,6 +78,17 @@ class MigrationVerifierTest extends TestCase
         );
     }
 
+    public function test_accepts_a_null_or_empty_body_with_no_s3_object(): void
+    {
+        $verifier = new MigrationVerifier($this->storage([]), $this->fileRepo([]));
+
+        $nullBody = new Email(['body' => null, 'body_s3_path' => null, 'file_ids' => [], 'file_s3_paths' => []]);
+        $this->assertSame([], $verifier->verify($nullBody));
+
+        $emptyBody = new Email(['body' => '', 'body_s3_path' => null, 'file_ids' => [], 'file_s3_paths' => []]);
+        $this->assertSame([], $verifier->verify($emptyBody));
+    }
+
     private function storage(array $sizes): ObjectStorage
     {
         return new class($sizes) implements ObjectStorage

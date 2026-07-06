@@ -9,6 +9,9 @@ use App\Models\Email;
 use Illuminate\Bus\PendingBatch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -63,5 +66,69 @@ class MigrateEmailsCommandTest extends TestCase
         $this->artisan('emails:migrate-to-s3')->assertSuccessful();
 
         Bus::assertNothingBatched();
+    }
+
+    public function test_refuses_while_a_previous_batch_still_has_jobs_in_flight(): void
+    {
+        Bus::fake();
+        Email::factory()->create();
+        $this->insertBatch(pendingJobs: 3, failedJobs: 0);
+
+        $this->artisan('emails:migrate-to-s3')->assertFailed();
+
+        Bus::assertNothingBatched();
+    }
+
+    public function test_force_overrides_the_active_batch_guard(): void
+    {
+        Bus::fake();
+        Email::factory()->create();
+        $this->insertBatch(pendingJobs: 3, failedJobs: 0);
+
+        $this->artisan('emails:migrate-to-s3 --force')->assertSuccessful();
+
+        Bus::assertBatched(fn (PendingBatch $batch) => $batch->jobs->count() === 1);
+    }
+
+    public function test_a_batch_whose_remaining_jobs_all_failed_does_not_block_a_new_run(): void
+    {
+        Bus::fake();
+        Email::factory()->create();
+        $this->insertBatch(pendingJobs: 2, failedJobs: 2);
+
+        $this->artisan('emails:migrate-to-s3')->assertSuccessful();
+
+        Bus::assertBatched(fn (PendingBatch $batch) => $batch->jobs->count() === 1);
+    }
+
+    public function test_refuses_when_another_invocation_holds_the_dispatch_lock(): void
+    {
+        // The database lock driver can't take two competing locks inside the
+        // test transaction (Postgres aborts it), so exercise this via the array store.
+        config(['cache.default' => 'array']);
+
+        Bus::fake();
+        Email::factory()->create();
+        Cache::lock('emails:migrate-to-s3:dispatch', 300)->get();
+
+        $this->artisan('emails:migrate-to-s3')->assertFailed();
+
+        Bus::assertNothingBatched();
+    }
+
+    private function insertBatch(int $pendingJobs, int $failedJobs): void
+    {
+        DB::table('job_batches')->insert([
+            'id' => (string) Str::uuid(),
+            'name' => 'emails-s3:previous',
+            'total_jobs' => 5,
+            'pending_jobs' => $pendingJobs,
+            'failed_jobs' => $failedJobs,
+            'failed_job_ids' => '[]',
+            'options' => null,
+            'cancelled_at' => null,
+            'created_at' => now()->getTimestamp(),
+            'finished_at' => null,
+        ]);
     }
 }

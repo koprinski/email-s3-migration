@@ -12,20 +12,15 @@ class S3PathTest extends TestCase
         $this->assertSame('emails/42/body.html', S3Path::body(42));
     }
 
-    public function test_attachment_key_includes_file_id_and_slugged_name(): void
+    public function test_attachment_key_is_per_file_so_shared_files_map_to_one_object(): void
     {
-        $this->assertSame('emails/42/attachments/7_report.pdf', S3Path::attachment(42, 7, 'report.pdf'));
+        $this->assertSame('files/7/report.pdf', S3Path::attachment(7, 'report.pdf'));
     }
 
     public function test_attachment_key_neutralises_unsafe_names(): void
     {
-        $this->assertSame('emails/1/attachments/9_my-file.pdf', S3Path::attachment(1, 9, 'My File.pdf'));
-        $this->assertSame('emails/1/attachments/9_passwd', S3Path::attachment(1, 9, '../../etc/passwd'));
-        $this->assertSame('emails/1/attachments/9_file', S3Path::attachment(1, 9, '...'));
-    }
-
-    public function test_prefix(): void
-    {
-        $this->assertSame('emails/5/', S3Path::prefix(5));
+        $this->assertSame('files/9/my-file.pdf', S3Path::attachment(9, 'My File.pdf'));
+        $this->assertSame('files/9/passwd', S3Path::attachment(9, '../../etc/passwd'));
+        $this->assertSame('files/9/file', S3Path::attachment(9, '...'));
     }
 }

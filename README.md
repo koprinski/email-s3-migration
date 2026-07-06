@@ -66,13 +66,19 @@ docker compose exec php-fpm php artisan emails:finalize-s3        # add --force 
 | Command | Purpose | Key options |
 |---|---|---|
 | `emails:seed` | Seed `emails` + `files` and write real on-disk attachments | `--count=` `--chunk=` `--files-min/max=` |
-| `emails:migrate-to-s3` | Dispatch a queued batch that uploads bodies + attachments and stamps `migrated_at` | `--chunk=` `--limit=` `--from-id=` `--retry-failed` |
+| `emails:migrate-to-s3` | Dispatch a queued batch that uploads bodies + attachments and stamps `migrated_at` | `--chunk=` `--limit=` `--from-id=` `--retry-failed` `--force` |
 | `emails:verify-s3` | Confirm S3 objects exist with the right size, stamp `verified_at` | `--chunk=` `--limit=` |
 | `emails:finalize-s3` | After full verification: delete local files, drop `body` | `--force` |
 
 `emails:migrate-to-s3` always queues a batch of chunk jobs and exits 0 once the batch is
 **dispatched** (not finished); a queue worker performs the upload, and failures land in
 the `migration_failures` table.
+
+Two guards prevent accidental double runs: a cache lock rejects a second invocation
+while one is still dispatching, and the command refuses (unless `--force`) while a
+previous migration batch still has jobs in flight. Attachments are stored once per
+`files` row (`files/{file_id}/…`), so a file shared by many emails is uploaded a
+single time.
 
 ---
 
